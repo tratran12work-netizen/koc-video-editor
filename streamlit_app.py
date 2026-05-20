@@ -1,5 +1,6 @@
-import streamlit as st
-from moviepy import editor as mp
+import PIL.Image
+if not hasattr(PIL.Image, 'ANTIALIAS'):
+    PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
 import tempfile
 import os
 
