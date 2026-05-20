@@ -11,7 +11,7 @@ from moviepy import editor as mp
 # --- CẤU HÌNH TRANG ---
 st.set_page_config(page_title="KOC Video Editor Pro", layout="centered")
 st.title("🎬 KOC Video Generator Pro v2")
-st.markdown("Hệ thống tự động hóa: Giữ bộ kéo thời lượng Voice A + Máy tự động phân tích/khớp Video B tràn khung 9:16")
+st.markdown("Bản tối ưu siêu nhẹ: Máy tự động phân bổ cảnh Video B khít theo Slider Voice A, không quét ngầm nặng máy!")
 
 # --- ĐỊNH NGHĨA KÍCH THƯỚC KHUNG HÌNH CHUẨN ĐẦU RA ---
 TARGET_W, TARGET_H = 1080, 1920
@@ -36,7 +36,7 @@ if "text_content" not in st.session_state:
 st.header("1. Bước 1: Thiết lập Video Voice (Video A)")
 
 if st.session_state.video_a_name:
-    st.info(f"📁 Video A hiện tại đang lưu: `{st.session_state.video_a_name}`")
+    st.info(f"📁 Video A đang lưu: `{st.session_state.video_a_name}`")
 
 video_a_file = st.file_uploader("Tải Video A mới (Lấy Audio/Voice gốc)", type=["mp4", "mov", "mpeg4"])
 
@@ -55,14 +55,12 @@ if video_a_file:
         st.session_state.max_duration = 60.0
     st.rerun()
 
-# [HIỂN THỊ ẢNH PREVIEW VIDEO + THANH SLIDER CHỌN THỜI LƯỢNG VOICE]
+# Hiển thị trình phát Video A + Slider chọn thời lượng Voice
 if st.session_state.video_a_path and os.path.exists(st.session_state.video_a_path):
     st.markdown("### 📺 Trình xem trước Video A để nghe khớp lời Voice:")
-    # st.video vừa hiển thị ảnh thumbnail của video vừa cho phép user ấn Play để nghe tiếng trực tiếp
     st.video(st.session_state.video_a_path)
     st.markdown(f"**Tổng thời lượng gốc của file:** `{st.session_state.max_duration:.1f}` giây")
     
-    # Thanh kéo chọn khoảng thời gian voice cần lấy dữ liệu
     st.session_state.trim_start, st.session_state.trim_end = st.slider(
         "Kéo hai đầu để chọn đoạn Voice muốn giữ lại (giây):", 
         min_value=0.0, 
@@ -71,23 +69,24 @@ if st.session_state.video_a_path and os.path.exists(st.session_state.video_a_pat
         step=0.1
     )
     voice_duration = st.session_state.trim_end - st.session_state.trim_start
-    st.info(f"⏱️ Khoảng Voice chọn lấy: Từ **{st.session_state.trim_start:.1f}s** đến **{st.session_state.trim_end:.1f}s** (Tổng độ dài: **{voice_duration:.1f} giây**)")
+    st.info(f"⏱️ Đoạn Voice chọn lấy dài: **{voice_duration:.1f} giây** (Từ {st.session_state.trim_start:.1f}s đến {st.session_state.trim_end:.1f}s)")
 
 st.markdown("---")
 
-# --- 2. TẢI VIDEO B (MÁY TỰ ĐỘNG PHÂN TÍCH VÀ RENDER PHÙ HỢP) ---
+# --- 2. TẢI VIDEO B (LƯU TRỮ TĨNH SIÊU NHẸ) ---
 st.header("2. Bước 2: Tải các Video B để đắp cảnh")
-video_b_files = st.file_uploader("Tải các Video B (Hệ thống tự động phân tích phân phối thời gian, không cần chia nhỏ)", type=["mp4", "mov", "mpeg4"], accept_multiple_files=True)
+video_b_files = st.file_uploader("Tải các Video B (Hệ thống tự động chia đều thời gian, không xử lý ngầm gây nặng máy)", type=["mp4", "mov", "mpeg4"], accept_multiple_files=True)
 
 if video_b_files:
     new_b_list = []
     for f in video_b_files:
+        # Lưu thẳng bytes vào bộ nhớ, không khởi tạo VideoFileClip phân tích tại đây
         new_b_list.append({"name": f.name, "bytes": f.getvalue()})
     st.session_state.uploaded_b_files = new_b_list
     st.rerun()
 
 if st.session_state.uploaded_b_files:
-    st.success(f"📂 Đã nhận {len(st.session_state.uploaded_b_files)} Video B. Máy tính sẽ tự động phân bổ cảnh khớp với trục Voice A.")
+    st.success(f"📂 Đã nhận {len(st.session_state.uploaded_b_files)} Video B. Sẵn sàng tự động phân phối khít theo Voice A.")
     for item in st.session_state.uploaded_b_files:
         st.caption(f"✓ {item['name']}")
 
@@ -119,16 +118,16 @@ def crop_to_fill_9_16(clip):
         clip_resized = clip.resize(width=new_w)
         return clip_resized.crop(x_center=TARGET_W / 2, y_center=new_h / 2, width=TARGET_W, height=TARGET_H)
 
-# --- HÀM TỰ ĐỘNG PHÂN TÍCH VÀ PHÂN PHỐI LỚP VIDEO ---
+# --- HÀM TỰ ĐỘNG PHÂN PHỐI LỚP VIDEO THEO TIMELINE GỐC ---
 def auto_process_video(video_a_path, uploaded_b_list, text_content):
     try:
-        # Trích xuất chính xác đoạn Audio và thời lượng đã được chọn trên Slider từ Video A
+        # Cắt chính xác đoạn Audio từ Video A theo Slider
         clip_a = mp.VideoFileClip(video_a_path)
         clip_a_cut = clip_a.subclip(st.session_state.trim_start, min(st.session_state.trim_end, clip_a.duration))
         audio_a = clip_a_cut.audio
         total_duration = clip_a_cut.duration
         
-        # Tự động chia đều quỹ thời gian dựa trên số lượng Video B up lên
+        # Tự động chia đều thời gian xuất hiện cho mỗi video B
         num_b = len(uploaded_b_list)
         duration_per_b = total_duration / num_b
         
@@ -141,18 +140,17 @@ def auto_process_video(video_a_path, uploaded_b_list, text_content):
                 b_path = tmp_b.name
             
             clip_b_raw = mp.VideoFileClip(b_path)
-            # Tự động lấy đoạn phù hợp từ đầu của mỗi Video B khít với thời lượng phân bổ
+            # Tự động lấy đoạn khớp từ đầu của mỗi Video B
             sub_b = clip_b_raw.subclip(0, min(duration_per_b, clip_b_raw.duration))
             
-            # Phóng to và căn tràn viền khung hình dọc 9:16
+            # Phóng to phủ kín hoàn toàn màn hình dọc 9:16
             sub_b_filled = crop_to_fill_9_16(sub_b)
-            # Tự động đặt vị trí nối đuôi nhau chuẩn xác trên dòng thời gian tổng
+            # Tự động xếp nối đuôi nhau chuẩn xác trên dòng thời gian tổng
             sub_b_positioned = sub_b_filled.set_start(current_timeline).set_duration(duration_per_b)
             composite_layers.append(sub_b_positioned)
             
             current_timeline += duration_per_b
             
-        # Chèn thêm phụ đề chữ nếu có dữ liệu text đầu vào
         if text_content:
             txt_clip = mp.TextClip(text_content, fontsize=50, color='white', font='Montserrat', bg_color='black')
             txt_clip = txt_clip.set_pos(('center', 1600)).set_start(0).set_duration(total_duration)
@@ -163,7 +161,7 @@ def auto_process_video(video_a_path, uploaded_b_list, text_content):
         return final_video
         
     except Exception as e:
-        st.error(f"Lỗi tự động phân tích cấu trúc Layer: {str(e)}")
+        st.error(f"Lỗi tự động cấu hình Layer: {str(e)}")
         return None
 
 # --- 4. NÚT BẤM VÀ XỬ LÝ TIẾN TRÌNH RENDER ---
@@ -176,20 +174,20 @@ if st.button("🚀 BẮT ĐẦU TẠO VIDEO TỰ ĐỘNG", use_container_width=T
         status_text = st.empty()
         
         try:
-            status_text.text("⚙️ Bước 1/3: Máy đang tự động tính toán thời lượng và phân tích khớp trục Voice A...")
+            status_text.text("⚙️ Bước 1/3: Hệ thống đang tự động phân bổ cảnh B khít dòng thời gian voice...")
             progress_bar.progress(30)
             
             final_video = auto_process_video(st.session_state.video_a_path, st.session_state.uploaded_b_files, st.session_state.text_content)
             
             if final_video:
-                status_text.text("⚙️ Bước 2/3: Đang tiến hành xử lý đồ họa nén tràn viền khung 9:16...")
+                status_text.text("⚙️ Bước 2/3: Đang tiến hành render xuất clip tràn khung 9:16...")
                 progress_bar.progress(65)
                 
                 output_path = "output_koc_auto_final.mp4"
                 final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", logger=None)
                 
                 progress_bar.progress(100)
-                status_text.text("🎉 Đã xuất dữ liệu video tự động hoàn thiện thành công!")
+                status_text.text("🎉 Đã xuất video tự động hoàn thiện thành công!")
                 
                 st.markdown("---")
                 st.header("📺 Xem trước kết quả Video hoàn thành")
