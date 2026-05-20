@@ -29,7 +29,6 @@ if "trim_end" not in st.session_state:
     st.session_state.trim_end = 15.0
 
 if "uploaded_b_files" not in st.session_state:
-    # Lưu danh sách thông tin video B dưới dạng bytes để không bị giải phóng khi F5
     st.session_state.uploaded_b_files = []
 if "b_configs" not in st.session_state:
     st.session_state.b_configs = {}
@@ -42,14 +41,12 @@ if "text_style" not in st.session_state:
 # --- 1. TẢI VIDEO SOURCE (VIDEO A) ---
 st.header("1. Bước 1: Thiết lập Video Voice (Video A)")
 
-# Hiện trạng thái file đã tải trước đó nếu có
 if st.session_state.video_a_name:
     st.info(f"📁 Video A hiện tại đang lưu: `{st.session_state.video_a_name}`")
 
 video_a_file = st.file_uploader("Tải Video A mới (Lấy Audio/Voice gốc)", type=["mp4", "mov", "mpeg4"])
 
 if video_a_file:
-    # Nếu có file mới tải lên, tiến hành lưu đè vào session_state
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_a:
         tmp_a.write(video_a_file.getvalue())
         st.session_state.video_a_path = tmp_a.name
@@ -63,7 +60,6 @@ if video_a_file:
         st.session_state.max_duration = 60.0
     st.rerun()
 
-# Hiển thị trình cấu hình Video A dựa trên Session State
 if st.session_state.video_a_path and os.path.exists(st.session_state.video_a_path):
     st.markdown("### 📺 Xem video để nghe và lấy mốc thời gian của Voice:")
     st.video(st.session_state.video_a_path)
@@ -86,7 +82,6 @@ st.header("2. Bước 2: Tải Video B và Phân tích Block 5 giây")
 video_b_files = st.file_uploader("Tải các Video B (Lấy hình ảnh minh họa)", type=["mp4", "mov", "mpeg4"], accept_multiple_files=True)
 
 if video_b_files:
-    # Chuyển đổi dữ liệu sang dạng bộ nhớ tạm cố định để không bị bay màu khi F5
     new_b_list = []
     for f in video_b_files:
         file_bytes = f.getvalue()
@@ -94,7 +89,7 @@ if video_b_files:
     st.session_state.uploaded_b_files = new_b_list
     st.rerun()
 
-# Biến tạm để tổng hợp danh sách render ngầm
+# KHỞI TẠO BIẾN LUÔN LUÔN TỒN TẠI (Tránh lỗi NameError khi bấm nút Render)
 b_segments_to_render = {}
 segment_counter = 0
 
@@ -126,7 +121,6 @@ if st.session_state.uploaded_b_files:
             if (end_time - start_time) >= 1.0:
                 block_key = f"{f_name}_block_{block_idx}"
                 
-                # Khởi tạo cấu hình mặc định an toàn cho block nếu chưa từng tồn tại
                 if block_key not in st.session_state.b_configs:
                     if block_idx == 1:
                         def_label = "Cảnh mở đầu - Cận cảnh KOC và sản phẩm"
@@ -145,7 +139,6 @@ if st.session_state.uploaded_b_files:
                     
                     with col_info:
                         st.info(f"🎞️ Phân khúc {block_idx} (Đoạn {start_time:.1f}s - {end_time:.1f}s)")
-                        # Đồng bộ trực tiếp text_input với session_state
                         st.session_state.b_configs[block_key]["label"] = st.text_input(
                             f"Tên phân cảnh nhận diện:", 
                             value=st.session_state.b_configs[block_key]["label"], 
@@ -154,7 +147,6 @@ if st.session_state.uploaded_b_files:
                         
                     with col_sync:
                         st.markdown("**🎯 Khớp đè lên Video A:**")
-                        # Thêm khóa chặn chặn đứng hoàn toàn lỗi StreamlitAPIException vượt quá max_value khi F5
                         st.session_state.b_configs[block_key]["target_start"] = st.number_input(
                             f"Xuất hiện tại giây thứ (trên Video A):", 
                             min_value=0.0, 
@@ -165,7 +157,6 @@ if st.session_state.uploaded_b_files:
                         target_end = st.session_state.b_configs[block_key]["target_start"] + (end_time - start_time)
                         st.caption(f"Sẽ kết thúc tại: {target_end:.1f}s")
                         
-                    # Gán vào từ điển để chuẩn bị ném vào hàm xử lý render phim
                     b_segments_to_render[block_key] = {
                         "file_bytes": f_bytes,
                         "b_start": start_time,
@@ -196,7 +187,7 @@ st.session_state.text_style = st.selectbox(
     key="main_text_style"
 )
 
-# --- HÀM ÉP VIDEO VỪA KHÍT CĂNG ĐÉT KHUNG 9:16 (CROP PHÓNG TO KHÔNG MÉO HÌNH) ---
+# --- HÀM ÉP VIDEO VỪA KHÍT CĂNG ĐÉT KHUNG 9:16 ---
 def crop_to_fill_9_16(clip):
     video_w, video_h = clip.size
     target_ratio = TARGET_W / TARGET_H
@@ -234,10 +225,7 @@ def process_video(video_a_path, b_segments, text_content, text_style):
             clip_b_raw = mp.VideoFileClip(b_path)
             sub_b = clip_b_raw.subclip(config["b_start"], min(config["b_end"], clip_b_raw.duration))
             
-            # Phóng to phủ kín màn hình dọc 9:16
             sub_b_filled = crop_to_fill_9_16(sub_b)
-            
-            # Cân chỉnh mốc thời gian xuất hiện đè lên trục voice gốc
             sub_b_positioned = sub_b_filled.set_start(config["target_start"] - trim_start).set_duration(sub_b.duration)
             composite_layers.append(sub_b_positioned)
         
