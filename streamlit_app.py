@@ -1,5 +1,5 @@
 import streamlit as st
-import moviepy.editor as mp
+from moviepy import editor as mp
 import tempfile
 import os
 
