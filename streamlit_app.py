@@ -11,7 +11,7 @@ from moviepy import editor as mp
 # --- CẤU HÌNH TRANG ---
 st.set_page_config(page_title="KOC Video Editor Pro", layout="centered")
 st.title("🎬 KOC Video Generator Pro v2")
-st.markdown("Bản tối ưu siêu nhẹ: Máy tự động phân bổ cảnh Video B khít theo Slider Voice A, không quét ngầm nặng máy!")
+st.markdown("Bản tối ưu tuyệt đối: Lấy 100% Voice Video A + Tự động khớp cảnh Video B + Không chèn Text")
 
 # --- ĐỊNH NGHĨA KÍCH THƯỚC KHUNG HÌNH CHUẨN ĐẦU RA ---
 TARGET_W, TARGET_H = 1080, 1920
@@ -21,85 +21,46 @@ if "video_a_path" not in st.session_state:
     st.session_state.video_a_path = None
 if "video_a_name" not in st.session_state:
     st.session_state.video_a_name = None
-if "max_duration" not in st.session_state:
-    st.session_state.max_duration = 60.0
-if "trim_start" not in st.session_state:
-    st.session_state.trim_start = 0.0
-if "trim_end" not in st.session_state:
-    st.session_state.trim_end = 15.0
 if "uploaded_b_files" not in st.session_state:
     st.session_state.uploaded_b_files = []
-if "text_content" not in st.session_state:
-    st.session_state.text_content = ""
 
 # --- 1. TẢI VIDEO SOURCE (VIDEO A) ---
-st.header("1. Bước 1: Thiết lập Video Voice (Video A)")
+st.header("1. Bước 1: Tải Video Voice (Video A)")
 
 if st.session_state.video_a_name:
     st.info(f"📁 Video A đang lưu: `{st.session_state.video_a_name}`")
 
-video_a_file = st.file_uploader("Tải Video A mới (Lấy Audio/Voice gốc)", type=["mp4", "mov", "mpeg4"])
+video_a_file = st.file_uploader("Tải Video A (Lấy 100% Audio/Voice gốc)", type=["mp4", "mov", "mpeg4"])
 
 if video_a_file:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_a:
         tmp_a.write(video_a_file.getvalue())
         st.session_state.video_a_path = tmp_a.name
         st.session_state.video_a_name = video_a_file.name
-    try:
-        clip_info = mp.VideoFileClip(st.session_state.video_a_path)
-        st.session_state.max_duration = float(clip_info.duration)
-        st.session_state.trim_start = 0.0
-        st.session_state.trim_end = min(15.0, st.session_state.max_duration)
-        clip_info.close()
-    except:
-        st.session_state.max_duration = 60.0
     st.rerun()
 
-# Hiển thị trình phát Video A + Slider chọn thời lượng Voice
+# Hiển thị trình phát Video A trực quan
 if st.session_state.video_a_path and os.path.exists(st.session_state.video_a_path):
-    st.markdown("### 📺 Trình xem trước Video A để nghe khớp lời Voice:")
+    st.markdown("### 📺 Trình xem trước Video A:")
     st.video(st.session_state.video_a_path)
-    st.markdown(f"**Tổng thời lượng gốc của file:** `{st.session_state.max_duration:.1f}` giây")
-    
-    st.session_state.trim_start, st.session_state.trim_end = st.slider(
-        "Kéo hai đầu để chọn đoạn Voice muốn giữ lại (giây):", 
-        min_value=0.0, 
-        max_value=st.session_state.max_duration, 
-        value=(st.session_state.trim_start, min(st.session_state.trim_end, st.session_state.max_duration)), 
-        step=0.1
-    )
-    voice_duration = st.session_state.trim_end - st.session_state.trim_start
-    st.info(f"⏱️ Đoạn Voice chọn lấy dài: **{voice_duration:.1f} giây** (Từ {st.session_state.trim_start:.1f}s đến {st.session_state.trim_end:.1f}s)")
 
 st.markdown("---")
 
 # --- 2. TẢI VIDEO B (LƯU TRỮ TĨNH SIÊU NHẸ) ---
 st.header("2. Bước 2: Tải các Video B để đắp cảnh")
-video_b_files = st.file_uploader("Tải các Video B (Hệ thống tự động chia đều thời gian, không xử lý ngầm gây nặng máy)", type=["mp4", "mov", "mpeg4"], accept_multiple_files=True)
+video_b_files = st.file_uploader("Tải các Video B (Hệ thống tự động chia đều thời gian và fit khung hình)", type=["mp4", "mov", "mpeg4"], accept_multiple_files=True)
 
 if video_b_files:
     new_b_list = []
     for f in video_b_files:
-        # Lưu thẳng bytes vào bộ nhớ, không khởi tạo VideoFileClip phân tích tại đây
         new_b_list.append({"name": f.name, "bytes": f.getvalue()})
     st.session_state.uploaded_b_files = new_b_list
     st.rerun()
 
 if st.session_state.uploaded_b_files:
-    st.success(f"📂 Đã nhận {len(st.session_state.uploaded_b_files)} Video B. Sẵn sàng tự động phân phối khít theo Voice A.")
+    st.success(f"📂 Đã nhận {len(st.session_state.uploaded_b_files)} Video B. Sẵn sàng tự động phân phối khít theo trục Voice A.")
     for item in st.session_state.uploaded_b_files:
         st.caption(f"✓ {item['name']}")
-
-st.markdown("---")
-
-# --- 3. CÀI ĐẶT TEXT CHÈN LÊN VIDEO ---
-st.header("3. Bước 3: Cài đặt phụ đề / Text")
-st.session_state.text_content = st.text_area(
-    "Nhập nội dung Text chèn lên giữa video", 
-    value=st.session_state.text_content,
-    placeholder="Ví dụ: CẬN CẢNH LÒNG MÁY XỊN SÒ...",
-    key="main_text_content"
-)
 
 # --- HÀM ÉP VIDEO VỪA KHÍT CĂNG ĐÉT KHUNG 9:16 (CROP KHÔNG MÉO) ---
 def crop_to_fill_9_16(clip):
@@ -119,15 +80,14 @@ def crop_to_fill_9_16(clip):
         return clip_resized.crop(x_center=TARGET_W / 2, y_center=new_h / 2, width=TARGET_W, height=TARGET_H)
 
 # --- HÀM TỰ ĐỘNG PHÂN PHỐI LỚP VIDEO THEO TIMELINE GỐC ---
-def auto_process_video(video_a_path, uploaded_b_list, text_content):
+def auto_process_video(video_a_path, uploaded_b_list):
     try:
-        # Cắt chính xác đoạn Audio từ Video A theo Slider
+        # Lấy toàn bộ 100% thời lượng của Video A
         clip_a = mp.VideoFileClip(video_a_path)
-        clip_a_cut = clip_a.subclip(st.session_state.trim_start, min(st.session_state.trim_end, clip_a.duration))
-        audio_a = clip_a_cut.audio
-        total_duration = clip_a_cut.duration
+        audio_a = clip_a.audio
+        total_duration = clip_a.duration
         
-        # Tự động chia đều thời gian xuất hiện cho mỗi video B
+        # Tự động chia đều thời gian xuất hiện dựa trên số lượng Video B up lên
         num_b = len(uploaded_b_list)
         duration_per_b = total_duration / num_b
         
@@ -140,21 +100,16 @@ def auto_process_video(video_a_path, uploaded_b_list, text_content):
                 b_path = tmp_b.name
             
             clip_b_raw = mp.VideoFileClip(b_path)
-            # Tự động lấy đoạn khớp từ đầu của mỗi Video B
+            # Lấy đoạn khớp từ đầu của mỗi Video B tương ứng với thời gian được chia đều
             sub_b = clip_b_raw.subclip(0, min(duration_per_b, clip_b_raw.duration))
             
-            # Phóng to phủ kín hoàn toàn màn hình dọc 9:16
+            # Phóng to phủ kín hoàn toàn màn hình dọc 9:16 không méo hình
             sub_b_filled = crop_to_fill_9_16(sub_b)
             # Tự động xếp nối đuôi nhau chuẩn xác trên dòng thời gian tổng
             sub_b_positioned = sub_b_filled.set_start(current_timeline).set_duration(duration_per_b)
             composite_layers.append(sub_b_positioned)
             
             current_timeline += duration_per_b
-            
-        if text_content:
-            txt_clip = mp.TextClip(text_content, fontsize=50, color='white', font='Montserrat', bg_color='black')
-            txt_clip = txt_clip.set_pos(('center', 1600)).set_start(0).set_duration(total_duration)
-            composite_layers.append(txt_clip)
             
         final_video = mp.CompositeVideoClip(composite_layers, size=(TARGET_W, TARGET_H))
         final_video = final_video.set_audio(audio_a)
@@ -164,7 +119,7 @@ def auto_process_video(video_a_path, uploaded_b_list, text_content):
         st.error(f"Lỗi tự động cấu hình Layer: {str(e)}")
         return None
 
-# --- 4. NÚT BẤM VÀ XỬ LÝ TIẾN TRÌNH RENDER ---
+# --- 3. NÚT BẤM VÀ XỬ LÝ TIẾN TRÌNH RENDER ---
 st.markdown("---")
 if st.button("🚀 BẮT ĐẦU TẠO VIDEO TỰ ĐỘNG", use_container_width=True):
     if not st.session_state.video_a_path or not st.session_state.uploaded_b_files:
@@ -174,13 +129,13 @@ if st.button("🚀 BẮT ĐẦU TẠO VIDEO TỰ ĐỘNG", use_container_width=T
         status_text = st.empty()
         
         try:
-            status_text.text("⚙️ Bước 1/3: Hệ thống đang tự động phân bổ cảnh B khít dòng thời gian voice...")
+            status_text.text("⚙️ Bước 1/3: Hệ thống đang tự động tính toán thời lượng khít 100% voice...")
             progress_bar.progress(30)
             
-            final_video = auto_process_video(st.session_state.video_a_path, st.session_state.uploaded_b_files, st.session_state.text_content)
+            final_video = auto_process_video(st.session_state.video_a_path, st.session_state.uploaded_b_files)
             
             if final_video:
-                status_text.text("⚙️ Bước 2/3: Đang tiến hành render xuất clip tràn khung 9:16...")
+                status_text.text("⚙️ Bước 2/3: Đang tiến hành nén xuất clip tràn khung 9:16...")
                 progress_bar.progress(65)
                 
                 output_path = "output_koc_auto_final.mp4"
